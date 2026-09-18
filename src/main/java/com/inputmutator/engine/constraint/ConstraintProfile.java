@@ -39,6 +39,23 @@ public record ConstraintProfile(
         return new Builder();
     }
 
+    public Builder toBuilder() {
+        return new Builder()
+                .inputType(this.inputType)
+                .granularityMode(this.granularityMode)
+                .maxPositionsMutated(this.maxPositionsMutated)
+                .canonicalizePreEncoded(this.canonicalizePreEncoded)
+                .encodingLayers(this.encodingLayers)
+                .minLength(this.minLength)
+                .maxLength(this.maxLength)
+                .allowNonPrintable(this.allowNonPrintable)
+                .allowNullBytes(this.allowNullBytes)
+                .preserveStructure(this.preserveStructure)
+                .maxDepth(this.maxDepth)
+                .maxPermutations(this.maxPermutations)
+                .allowedPattern(this.allowedPattern);
+    }
+
     public static class Builder {
         private InputType inputType = InputType.GENERIC_STRING;
         private GranularityMode granularityMode = GranularityMode.TOKEN_ONLY;

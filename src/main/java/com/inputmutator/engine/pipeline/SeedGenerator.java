@@ -3,7 +3,6 @@ package com.inputmutator.engine.pipeline;
 import com.inputmutator.engine.constraint.ConstraintProfile;
 import com.inputmutator.engine.model.InputType;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -77,13 +76,6 @@ public class SeedGenerator {
             );
         };
 
-        // Filter seeds against length bounds and constraints
-        List<String> validSeeds = new ArrayList<>();
-        for (String seed : seeds) {
-            if (seed.length() >= profile.minLength() && seed.length() <= profile.maxLength()) {
-                validSeeds.add(seed);
-            }
-        }
-        return validSeeds.isEmpty() ? List.of("test") : validSeeds;
+        return seeds;
     }
 }

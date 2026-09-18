@@ -89,6 +89,20 @@ public class EscapingMutator implements Mutator {
             results.add(hexEsc.toString());
         }
 
+        // 3b. C-style octal escapes (\OOO) for ASCII
+        StringBuilder octEsc = new StringBuilder();
+        for (int cp : val.codePoints().toArray()) {
+            if (cp <= 0xFF) {
+                octEsc.append(String.format("\\%03o", cp));
+            } else {
+                octEsc.setLength(0);
+                break;
+            }
+        }
+        if (!octEsc.isEmpty()) {
+            results.add(octEsc.toString());
+        }
+
         // 4. HTML Entities (for single characters / delimiters)
         if (val.codePointCount(0, val.length()) == 1) {
             int cp = val.codePointAt(0);
@@ -100,13 +114,17 @@ public class EscapingMutator implements Mutator {
             }
             results.add("&#" + cp + ";");
             results.add("&#0000" + cp + ";");
+            results.add(String.format("&#%08d;", cp)); // 8-digit overlong zero-padded decimal
             results.add("&#x" + Integer.toHexString(cp) + ";");
+            results.add(String.format("&#x%08x;", cp)); // 8-digit overlong zero-padded hex
             results.add("&#X" + Integer.toHexString(cp).toUpperCase() + ";");
         }
 
-        // 5. JSON escaped slash
+        // 5. Slash alternatives and JSON escaped slash
         if (val.contains("/")) {
             results.add(val.replace("/", "\\/"));
+            results.add(val.replace("/", "\u2044")); // Unicode Fraction Slash
+            results.add(val.replace("/", "\u2215")); // Unicode Division Slash
         }
 
         results.remove(val);

@@ -82,6 +82,6 @@ public class ConstraintValidator {
 
     private boolean validateNumericStructure(String num) {
         String trimmed = num.trim();
-        return trimmed.matches("^[+-]?(?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?|[0-9]+)$");
+        return trimmed.matches("(?U)^[+-]?(?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?|[0-9]+)$");
     }
 }

@@ -55,6 +55,29 @@ public class UnicodeMutator implements Mutator {
             "ij", "\u0133"
     );
 
+    private static final Map<Character, String> NFKC_SINGLETON_MAP = Map.of(
+            'k', "\u212A", // Kelvin sign normalizes to 'k'/'K'
+            'K', "\u212A",
+            'a', "\u00AA", // Feminine ordinal indicator normalizes to 'a'
+            'o', "\u00BA", // Masculine ordinal indicator normalizes to 'o'
+            's', "\u017F"  // Latin small letter long s normalizes to 's'
+    );
+
+    private static final Map<Character, String> GREEK_CONFUSABLE_MAP = Map.of(
+            'o', "\u03BF", // Greek small letter omicron
+            'v', "\u03BD", // Greek small letter nu
+            'p', "\u03C1", // Greek small letter rho
+            'x', "\u03C7", // Greek small letter chi
+            'a', "\u03B1", // Greek small letter alpha
+            'e', "\u03B5", // Greek small letter epsilon
+            'i', "\u03B9"  // Greek small letter iota
+    );
+
+    private static final Map<Character, String> TURKISH_CASE_MAP = Map.of(
+            'i', "\u0131", // Turkish dotless small i
+            'I', "\u0130"  // Turkish dotted capital I
+    );
+
     @Override
     public String name() {
         return "UnicodeMutator";
@@ -65,7 +88,7 @@ public class UnicodeMutator implements Mutator {
         TokenType t = token.type();
         return t == TokenType.LITERAL || t == TokenType.DELIMITER ||
                t == TokenType.SPECIAL_CHAR || t == TokenType.EMAIL_LOCAL ||
-               t == TokenType.JSON_VALUE;
+               t == TokenType.JSON_VALUE || t == TokenType.JSON_KEY;
     }
 
     @Override
@@ -138,6 +161,44 @@ public class UnicodeMutator implements Mutator {
             }
         }
 
+        // 4b. NFKC singleton compatibility substitutions
+        for (Map.Entry<Character, String> entry : NFKC_SINGLETON_MAP.entrySet()) {
+            char target = entry.getKey();
+            if (val.indexOf(target) >= 0) {
+                results.add(val.replace(String.valueOf(target), entry.getValue()));
+            }
+        }
+
+        // 4c. Greek confusable substitutions
+        for (Map.Entry<Character, String> entry : GREEK_CONFUSABLE_MAP.entrySet()) {
+            char target = entry.getKey();
+            if (val.indexOf(target) >= 0) {
+                results.add(val.replace(String.valueOf(target), entry.getValue()));
+            }
+        }
+
+        // 4d. Turkish locale-sensitive case variants
+        for (Map.Entry<Character, String> entry : TURKISH_CASE_MAP.entrySet()) {
+            char target = entry.getKey();
+            if (val.indexOf(target) >= 0) {
+                results.add(val.replace(String.valueOf(target), entry.getValue()));
+            }
+        }
+
+        // 4e. Collation and regex splitters (soft hyphen and zero-width non-joiner)
+        if (val.length() > 1) {
+            results.add(val.charAt(0) + "\u00AD" + val.substring(1));
+            results.add(val.charAt(0) + "\u200C" + val.substring(1));
+            results.add(val.charAt(0) + "\u200B" + val.substring(1)); // Zero-Width Space
+            results.add(val.charAt(0) + "\u2060" + val.substring(1)); // Word Joiner
+        }
+
+        // 4f. Circled / enclosed alphanumerics
+        String circled = toCircled(val);
+        if (circled != null) {
+            results.add(circled);
+        }
+
         // 5. Combining diacritical marks (inject after first character)
         if (!val.isEmpty()) {
             results.add(val.charAt(0) + "\u0301" + (val.length() > 1 ? val.substring(1) : ""));
@@ -179,5 +240,25 @@ public class UnicodeMutator implements Mutator {
         }
 
         return new ArrayList<>(results);
+    }
+
+    private String toCircled(String s) {
+        StringBuilder sb = new StringBuilder();
+        boolean hasCircled = false;
+        for (char c : s.toCharArray()) {
+            if (c >= 'a' && c <= 'z') {
+                sb.append((char) ('\u24D0' + (c - 'a')));
+                hasCircled = true;
+            } else if (c >= 'A' && c <= 'Z') {
+                sb.append((char) ('\u24B6' + (c - 'A')));
+                hasCircled = true;
+            } else if (c >= '1' && c <= '9') {
+                sb.append((char) ('\u2460' + (c - '1')));
+                hasCircled = true;
+            } else {
+                sb.append(c);
+            }
+        }
+        return hasCircled ? sb.toString() : null;
     }
 }

@@ -190,4 +190,88 @@ class MutationEngineTest {
         // Should produce variations based on canonical 'admin' (such as homoglyphs or alternate encodings)
         assertNotNull(results);
     }
+
+    @Test
+    void testDependencyInjectionAndDefensiveCopying() {
+        var mutatorsList = new java.util.ArrayList<com.inputmutator.engine.pipeline.Mutator>();
+        mutatorsList.add(new com.inputmutator.engine.pipeline.mutators.UnicodeMutator());
+
+        var customEngine = new MutationEngine(
+                new com.inputmutator.engine.tokenizer.InputTokenizer(),
+                new com.inputmutator.engine.constraint.ConstraintValidator(),
+                mutatorsList,
+                new com.inputmutator.engine.pipeline.SeedGenerator(),
+                new com.inputmutator.engine.encoding.EncodingDetector(),
+                new com.inputmutator.engine.encoding.Canonicalizer()
+        );
+
+        // Mutating external list should not affect internal state
+        mutatorsList.clear();
+
+        ConstraintProfile profile = ConstraintProfile.builder()
+                .inputType(InputType.GENERIC_STRING)
+                .maxPermutations(10)
+                .build();
+        List<String> results = customEngine.generate("admin", profile);
+        assertFalse(results.isEmpty());
+
+        // Null checks
+        assertThrows(NullPointerException.class, () -> new MutationEngine(null, null, null));
+        assertThrows(NullPointerException.class, () -> engine.generate("test", null));
+    }
+
+    @Test
+    void testCombinatorialWithConfigurablePositions() {
+        ConstraintProfile profile3Pos = ConstraintProfile.builder()
+                .granularityMode(com.inputmutator.engine.model.GranularityMode.COMBINATORIAL)
+                .maxPositionsMutated(3)
+                .maxPermutations(50)
+                .build();
+
+        List<String> results3 = engine.generate("testing", profile3Pos);
+        assertFalse(results3.isEmpty());
+
+        ConstraintProfile profile1Pos = ConstraintProfile.builder()
+                .granularityMode(com.inputmutator.engine.model.GranularityMode.COMBINATORIAL)
+                .maxPositionsMutated(1)
+                .maxPermutations(50)
+                .build();
+
+        List<String> results1 = engine.generate("testing", profile1Pos);
+        assertFalse(results1.isEmpty());
+    }
+
+    @Test
+    void testConstraintProfileToBuilderPreservesFields() {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^[a-z]+$");
+        ConstraintProfile original = ConstraintProfile.builder()
+                .inputType(InputType.NUMERIC)
+                .maxPositionsMutated(3)
+                .encodingLayers(2)
+                .minLength(5)
+                .maxLength(50)
+                .allowNonPrintable(true)
+                .allowNullBytes(true)
+                .preserveStructure(false)
+                .maxDepth(4)
+                .maxPermutations(75)
+                .allowedPattern(pattern)
+                .build();
+
+        ConstraintProfile derived = original.toBuilder()
+                .inputType(InputType.GENERIC_STRING)
+                .build();
+
+        assertEquals(InputType.GENERIC_STRING, derived.inputType());
+        assertEquals(original.maxPositionsMutated(), derived.maxPositionsMutated());
+        assertEquals(original.encodingLayers(), derived.encodingLayers());
+        assertEquals(original.minLength(), derived.minLength());
+        assertEquals(original.maxLength(), derived.maxLength());
+        assertEquals(original.allowNonPrintable(), derived.allowNonPrintable());
+        assertEquals(original.allowNullBytes(), derived.allowNullBytes());
+        assertEquals(original.preserveStructure(), derived.preserveStructure());
+        assertEquals(original.maxDepth(), derived.maxDepth());
+        assertEquals(original.maxPermutations(), derived.maxPermutations());
+        assertEquals(original.allowedPattern(), derived.allowedPattern());
+    }
 }

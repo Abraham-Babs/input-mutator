@@ -78,11 +78,39 @@ public class NumericRadixMutator implements Mutator {
                 results.add(String.valueOf((long) Integer.MAX_VALUE + 1)); // 32-bit signed overflow
                 results.add(String.valueOf(Long.MAX_VALUE));
             }
+
+            // Unicode cultural & fullwidth digit representations
+            results.add(toFullwidthDigits(val));
+            results.add(toArabicIndicDigits(val));
         } catch (NumberFormatException ignored) {
             // Not directly parseable as standard number, keep graceful
         }
 
         results.remove(val);
         return new ArrayList<>(results);
+    }
+
+    private String toFullwidthDigits(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (char c : s.toCharArray()) {
+            if (c >= '0' && c <= '9') {
+                sb.append((char) (c - '0' + 0xFF10));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    private String toArabicIndicDigits(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (char c : s.toCharArray()) {
+            if (c >= '0' && c <= '9') {
+                sb.append((char) (c - '0' + 0x0660));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }
