@@ -49,11 +49,16 @@ public class ConstraintValidator {
     }
 
     private boolean containsUnescapedControlChars(String s) {
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if ((c <= 0x1F && c != '\t' && c != '\r' && c != '\n') || c == 0x7F) {
+        int len = s.length();
+        for (int i = 0; i < len; ) {
+            int cp = s.codePointAt(i);
+            if ((cp <= 0x1F && cp != '\t' && cp != '\r' && cp != '\n')
+                    || cp == 0x7F
+                    || (cp >= 0x80 && cp <= 0x9F)
+                    || (cp >= 0xD800 && cp <= 0xDFFF)) {
                 return true;
             }
+            i += Character.charCount(cp);
         }
         return false;
     }

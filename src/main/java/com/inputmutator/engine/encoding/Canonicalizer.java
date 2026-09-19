@@ -116,16 +116,31 @@ public class Canonicalizer {
                 } catch (Exception ignored) {}
             }
             if (byteBuf.size() > 0) {
-                sb.append(byteBuf.toString(StandardCharsets.UTF_8));
-                byteBuf.reset();
+                flushByteBuf(sb, byteBuf);
             }
             sb.append(s.charAt(i));
             i++;
         }
         if (byteBuf.size() > 0) {
-            sb.append(byteBuf.toString(StandardCharsets.UTF_8));
+            flushByteBuf(sb, byteBuf);
         }
         return sb.toString();
+    }
+
+    private void flushByteBuf(StringBuilder sb, java.io.ByteArrayOutputStream byteBuf) {
+        byte[] bytes = byteBuf.toByteArray();
+        byteBuf.reset();
+        try {
+            java.nio.charset.CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+            String decoded = decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString();
+            sb.append(decoded);
+        } catch (java.nio.charset.CharacterCodingException e) {
+            for (byte b : bytes) {
+                sb.append((char) (b & 0xFF));
+            }
+        }
     }
 
     private static boolean isHex(char c) {

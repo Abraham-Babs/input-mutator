@@ -21,6 +21,11 @@ public class JsonDifferentialMutator implements Mutator {
     }
 
     @Override
+    public boolean supportsCharacterLevel() {
+        return false;
+    }
+
+    @Override
     public boolean appliesTo(Token token, TransformationContext context) {
         return token.type() == TokenType.JSON_KEY || token.type() == TokenType.JSON_VALUE;
     }

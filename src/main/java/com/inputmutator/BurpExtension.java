@@ -17,7 +17,7 @@ public class BurpExtension implements burp.api.montoya.BurpExtension {
         api.userInterface().registerContextMenuItemsProvider(new com.inputmutator.burp.MutatorContextMenuProvider(api, mainPanel));
 
         // Register custom Payload Generator for Burp Intruder
-        api.intruder().registerPayloadGeneratorProvider(new com.inputmutator.burp.MutatorPayloadGeneratorProvider());
+        api.intruder().registerPayloadGeneratorProvider(new com.inputmutator.burp.MutatorPayloadGeneratorProvider(mainPanel));
 
         api.logging().logToOutput("Input Mutator extension, Context Menu, and Intruder Generator loaded successfully.");
     }

@@ -22,6 +22,13 @@ public interface Mutator {
     }
 
     /**
+     * Indicates whether this mutator can meaningfully target individual character slices in single-position mode.
+     */
+    default boolean supportsCharacterLevel() {
+        return true;
+    }
+
+    /**
      * Determines whether this mutator can process the given token under the current context.
      */
     boolean appliesTo(Token token, TransformationContext context);

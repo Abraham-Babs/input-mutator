@@ -21,6 +21,11 @@ public class NumericRadixMutator implements Mutator {
     }
 
     @Override
+    public boolean supportsCharacterLevel() {
+        return false;
+    }
+
+    @Override
     public com.inputmutator.engine.model.ArtifactCategory category() {
         return com.inputmutator.engine.model.ArtifactCategory.NUMERIC_RADIX;
     }

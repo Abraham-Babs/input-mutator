@@ -22,6 +22,11 @@ public class UrlDifferentialMutator implements Mutator {
     }
 
     @Override
+    public boolean supportsCharacterLevel() {
+        return false;
+    }
+
+    @Override
     public boolean appliesTo(Token token, TransformationContext context) {
         InputType type = context.profile().inputType();
         if (type == InputType.URL_PATH) {

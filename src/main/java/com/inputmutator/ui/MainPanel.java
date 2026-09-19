@@ -15,6 +15,9 @@ import javax.swing.event.CaretEvent;
 import javax.swing.event.CaretListener;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
+import java.io.File;
+import java.io.FileWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -39,9 +42,14 @@ public class MainPanel extends JPanel {
     private final JTextArea outputArea;
     private final JLabel statusLabel;
     private final JButton generateButton;
+    private final JButton cancelButton;
+    private final JButton exportButton;
+    private final JLabel conflictNoticeLabel;
     private final MutationEngine engine;
     private final ParserSimulator simulator;
     private final Timer inspectorDebounceTimer;
+    private SwingWorker<List<String>, Void> currentWorker;
+    private SwingWorker<ParserSimulator.SimulationResult, Void> activeInspectorWorker;
 
     // Differential Parser Inspector fields
     private final JTextField simUrlField;
@@ -67,47 +75,36 @@ public class MainPanel extends JPanel {
         headerPanel.add(titleLabel);
         headerPanel.add(subtitleLabel);
 
-        // Input & Controls
-        JPanel controlsPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(3, 4, 3, 4);
+        // Tab 1: Target & Strategy
+        JPanel targetTab = new JPanel(new GridBagLayout());
+        targetTab.setBorder(new EmptyBorder(8, 8, 8, 8));
+        GridBagConstraints tgbc = new GridBagConstraints();
+        tgbc.fill = GridBagConstraints.HORIZONTAL;
+        tgbc.insets = new Insets(3, 4, 3, 4);
 
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.weightx = 0;
-        controlsPanel.add(createLabelWithHelp("Target Input:",
-                "Target string to mutate. Leave empty to synthesize data-type boundary archetype seeds (e.g. NaN, IP emails, traversal paths)."), gbc);
+        tgbc.gridx = 0; tgbc.gridy = 0; tgbc.weightx = 0;
+        targetTab.add(createLabelWithHelp("Target Input:",
+                "Target string to mutate. Leave empty to synthesize data-type boundary archetype seeds (e.g. NaN, IP emails, traversal paths)."), tgbc);
 
         inputField = new JTextField();
         inputField.setToolTipText("Target string to mutate (or leave empty to synthesize boundary archetype seeds)");
-        gbc.gridx = 1;
-        gbc.gridy = 0;
-        gbc.weightx = 1.0;
-        controlsPanel.add(inputField, gbc);
+        tgbc.gridx = 1; tgbc.gridy = 0; tgbc.weightx = 1.0;
+        targetTab.add(inputField, tgbc);
 
-        // Input Type Selector
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        gbc.weightx = 0;
-        controlsPanel.add(createLabelWithHelp("Input Type:",
-                "Input semantic structure (Numeric, JSON, Email, URL/Path, Phone). Directs tokenizer and preserves format syntax boundaries."), gbc);
+        tgbc.gridx = 0; tgbc.gridy = 1; tgbc.weightx = 0;
+        targetTab.add(createLabelWithHelp("Input Type:",
+                "Input semantic structure (Numeric, JSON, Email, URL/Path, Phone). Directs tokenizer and preserves format syntax boundaries."), tgbc);
 
         typeSelector = new JComboBox<>(new String[]{
                 "Auto-Detect", "Generic String", "Numeric", "JSON", "Email", "URL / Path", "Phone Number"
         });
         typeSelector.setToolTipText("Input semantic structure (Auto-Detect, Numeric, JSON, Email, URL/Path, Phone Number)");
-        gbc.gridx = 1;
-        gbc.gridy = 1;
-        gbc.weightx = 1.0;
-        controlsPanel.add(typeSelector, gbc);
+        tgbc.gridx = 1; tgbc.gridy = 1; tgbc.weightx = 1.0;
+        targetTab.add(typeSelector, tgbc);
 
-        // Testing Intent Selector
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        gbc.weightx = 0;
-        controlsPanel.add(createLabelWithHelp("Testing Intent:",
-                "Operational audit strategy: Whitelist Auditing (strict spec compliance), Blacklist Evasion (WAF/filter bypass), or Parser Differential (desync vectors)."), gbc);
+        tgbc.gridx = 0; tgbc.gridy = 2; tgbc.weightx = 0;
+        targetTab.add(createLabelWithHelp("Testing Intent:",
+                "Operational audit strategy: Whitelist Auditing (strict spec compliance), Blacklist Evasion (WAF/filter bypass), or Parser Differential (desync vectors)."), tgbc);
 
         intentSelector = new JComboBox<>(new String[]{
                 "Blacklist Evasion (Bypass WAF / Keyword Filters)",
@@ -116,17 +113,30 @@ public class MainPanel extends JPanel {
         });
         intentSelector.setToolTipText("Testing intent guiding baseline artifact categories and strategy selection");
         intentSelector.addActionListener(e -> updateDefaultCategoriesForIntent());
-        gbc.gridx = 1;
-        gbc.gridy = 2;
-        gbc.weightx = 1.0;
-        controlsPanel.add(intentSelector, gbc);
+        tgbc.gridx = 1; tgbc.gridy = 2; tgbc.weightx = 1.0;
+        targetTab.add(intentSelector, tgbc);
 
-        // Character Set Constraint Selector
-        gbc.gridx = 0;
-        gbc.gridy = 3;
-        gbc.weightx = 0;
-        controlsPanel.add(createLabelWithHelp("Charset Rule:",
-                "Declarative character constraint: Any (unrestricted), ASCII Only (0-127), Alphanumeric (A-Z, a-z, 0-9), or Printable ASCII (0x20-0x7E)."), gbc);
+        tgbc.gridx = 0; tgbc.gridy = 3; tgbc.weightx = 0;
+        targetTab.add(createLabelWithHelp("Granularity:",
+                "Permutation scope: Token-Level (whole token), Single Character (sliding-window across all positions), or Combinatorial (multi-position subsets)."), tgbc);
+
+        granularitySelector = new JComboBox<>(new String[]{
+                "Token-Level (Default)", "Single Character (Sliding)", "Combinatorial (Multi-Char)"
+        });
+        granularitySelector.setToolTipText("Permutation scope: Token-Level (fast), Single-Char (sliding-window), or Combinatorial (multi-char)");
+        tgbc.gridx = 1; tgbc.gridy = 3; tgbc.weightx = 1.0;
+        targetTab.add(granularitySelector, tgbc);
+
+        // Tab 2: Constraints & Rules
+        JPanel constraintsTab = new JPanel(new GridBagLayout());
+        constraintsTab.setBorder(new EmptyBorder(8, 8, 8, 8));
+        GridBagConstraints cgbc = new GridBagConstraints();
+        cgbc.fill = GridBagConstraints.HORIZONTAL;
+        cgbc.insets = new Insets(3, 4, 3, 4);
+
+        cgbc.gridx = 0; cgbc.gridy = 0; cgbc.weightx = 0;
+        constraintsTab.add(createLabelWithHelp("Charset Rule:",
+                "Declarative character constraint: Any (unrestricted), ASCII Only (0-127), Alphanumeric (A-Z, a-z, 0-9), or Printable ASCII (0x20-0x7E)."), cgbc);
 
         charsetSelector = new JComboBox<>(new String[]{
                 "Any Characters (Unrestricted)",
@@ -135,35 +145,40 @@ public class MainPanel extends JPanel {
                 "Printable ASCII (0x20 - 0x7E)"
         });
         charsetSelector.setToolTipText("Declarative character set boundary (Any, ASCII Only, Alphanumeric A-Z a-z 0-9, Printable ASCII)");
-        gbc.gridx = 1;
-        gbc.gridy = 3;
-        gbc.weightx = 1.0;
-        controlsPanel.add(charsetSelector, gbc);
+        charsetSelector.addActionListener(e -> checkConstraintConflicts());
+        cgbc.gridx = 1; cgbc.gridy = 0; cgbc.weightx = 1.0;
+        constraintsTab.add(charsetSelector, cgbc);
 
-        // Granularity Selector
-        gbc.gridx = 0;
-        gbc.gridy = 4;
-        gbc.weightx = 0;
-        controlsPanel.add(createLabelWithHelp("Granularity:",
-                "Permutation scope: Token-Level (whole token), Single Character (sliding-window across all positions), or Combinatorial (multi-position subsets)."), gbc);
+        cgbc.gridx = 0; cgbc.gridy = 1; cgbc.weightx = 0;
+        constraintsTab.add(createLabelWithHelp("Rules & Flags:", "Structural integrity and byte filtering flags."), cgbc);
 
-        granularitySelector = new JComboBox<>(new String[]{
-                "Token-Level (Default)", "Single Character (Sliding)", "Combinatorial (Multi-Char)"
-        });
-        granularitySelector.setToolTipText("Permutation scope: Token-Level (fast), Single-Char (sliding-window), or Combinatorial (multi-char)");
-        gbc.gridx = 1;
-        gbc.gridy = 4;
-        gbc.weightx = 1.0;
-        controlsPanel.add(granularitySelector, gbc);
+        JPanel flagsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        canonicalizeBox = new JCheckBox("Canonicalize Pre-Encoded", true);
+        canonicalizeBox.setToolTipText("Auto-detect and canonicalize pre-encoded inputs before applying targeted mutations");
+        preserveStructureBox = new JCheckBox("Preserve Structure", true);
+        preserveStructureBox.setToolTipText("Preserve protocol/syntax structure (e.g. valid RFC email, balanced JSON brackets/quotes)");
+        allowNonPrintableBox = new JCheckBox("Allow Controls / Surrogates", false);
+        allowNonPrintableBox.setToolTipText("Allow unescaped C0/C1 control codes (0x00-0x1F, 0x80-0x9F, 0x7F) and lone surrogate codepoints");
+        allowNullBytesBox = new JCheckBox("Allow Raw NUL (\\0)", false);
+        allowNullBytesBox.setToolTipText("Permit raw unescaped NUL (\\0) bytes in generated outputs");
 
-        // Artifact Categories Checkboxes
-        gbc.gridx = 0;
-        gbc.gridy = 5;
-        gbc.weightx = 0;
-        controlsPanel.add(createLabelWithHelp("Artifacts:",
-                "Select which mutation artifact vector families are generated. Hover over any category (?) for details."), gbc);
+        flagsRow.add(createBoxWithHelp(canonicalizeBox, "Auto-detect and canonicalize pre-encoded inputs before applying targeted mutations"));
+        flagsRow.add(createBoxWithHelp(preserveStructureBox, "Preserve protocol/syntax structure (e.g. valid RFC email, balanced JSON brackets/quotes)"));
+        flagsRow.add(createBoxWithHelp(allowNonPrintableBox, "Allow unescaped C0/C1 control codes (0x00-0x1F, 0x80-0x9F, 0x7F) and lone surrogate codepoints"));
+        flagsRow.add(createBoxWithHelp(allowNullBytesBox, "Permit raw unescaped NUL (\\0) bytes in generated outputs"));
 
+        cgbc.gridx = 1; cgbc.gridy = 1; cgbc.weightx = 1.0;
+        constraintsTab.add(flagsRow, cgbc);
+
+        conflictNoticeLabel = new JLabel(" ");
+        conflictNoticeLabel.setForeground(new Color(180, 50, 0));
+        conflictNoticeLabel.setFont(conflictNoticeLabel.getFont().deriveFont(Font.BOLD, 11f));
+        cgbc.gridx = 1; cgbc.gridy = 2; cgbc.weightx = 1.0;
+        constraintsTab.add(conflictNoticeLabel, cgbc);
+
+        // Tab 3: Artifact Categories
         JPanel categoryPanel = new JPanel(new GridLayout(2, 4, 6, 2));
+        categoryPanel.setBorder(new EmptyBorder(8, 8, 8, 8));
         for (ArtifactCategory cat : ArtifactCategory.values()) {
             String label = switch (cat) {
                 case URL_ENCODING -> "URL";
@@ -187,6 +202,7 @@ public class MainPanel extends JPanel {
             itemPanel.setOpaque(false);
             JCheckBox box = new JCheckBox(label);
             box.setToolTipText(tooltip);
+            box.addActionListener(e -> checkConstraintConflicts());
             JLabel q = createHelpIcon(tooltip);
             itemPanel.add(box);
             itemPanel.add(q);
@@ -195,30 +211,16 @@ public class MainPanel extends JPanel {
         }
         updateDefaultCategoriesForIntent();
 
-        gbc.gridx = 1;
-        gbc.gridy = 5;
-        gbc.weightx = 1.0;
-        controlsPanel.add(categoryPanel, gbc);
+        // Assemble Tabbed Pane
+        JTabbedPane tabbedPane = new JTabbedPane();
+        tabbedPane.addTab("Target & Strategy", targetTab);
+        tabbedPane.addTab("Constraints & Rules", constraintsTab);
+        tabbedPane.addTab("Artifact Families", categoryPanel);
 
-        // Advanced Constraints & Options
-        JPanel optionsPanel = new JPanel(new GridLayout(2, 1, 0, 4));
+        // Bottom Action & Options Bar
+        JPanel actionBar = new JPanel(new BorderLayout(8, 4));
 
-        JPanel flagsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        canonicalizeBox = new JCheckBox("Canonicalize Pre-Encoded", true);
-        canonicalizeBox.setToolTipText("Auto-detect and canonicalize pre-encoded inputs before applying targeted mutations");
-        preserveStructureBox = new JCheckBox("Preserve Structure", true);
-        preserveStructureBox.setToolTipText("Preserve protocol/syntax structure (e.g. valid RFC email, balanced JSON brackets/quotes)");
-        allowNonPrintableBox = new JCheckBox("Allow Controls / Surrogates", false);
-        allowNonPrintableBox.setToolTipText("Allow unescaped C0/C1 control codes (0x00-0x1F, 0x7F) and lone surrogate codepoints");
-        allowNullBytesBox = new JCheckBox("Allow Raw NUL (\\0)", false);
-        allowNullBytesBox.setToolTipText("Permit raw unescaped NUL (\\0) bytes in generated outputs");
-
-        flagsRow.add(createBoxWithHelp(canonicalizeBox, "Auto-detect and canonicalize pre-encoded inputs before applying targeted mutations"));
-        flagsRow.add(createBoxWithHelp(preserveStructureBox, "Preserve protocol/syntax structure (e.g. valid RFC email, balanced JSON brackets/quotes)"));
-        flagsRow.add(createBoxWithHelp(allowNonPrintableBox, "Allow unescaped C0/C1 control codes (0x00-0x1F, 0x7F) and lone surrogate codepoints"));
-        flagsRow.add(createBoxWithHelp(allowNullBytesBox, "Permit raw unescaped NUL (\\0) bytes in generated outputs"));
-
-        JPanel spinnersRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        JPanel spinnersRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 2));
         layersSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 3, 1));
         layersSpinner.setToolTipText("Nested encoding layers for escape transformations (1 = single, 2 = double, 3 = triple)");
         spinnersRow.add(createLabelWithHelp("Layers:", "Nested encoding layers (1 = single %xx, 2 = double %25xx, 3 = triple %2525xx)"));
@@ -234,45 +236,42 @@ public class MainPanel extends JPanel {
         spinnersRow.add(createLabelWithHelp("Depth:", "Maximum recursive transformation depth for chained mutations (1 - 4)"));
         spinnersRow.add(maxDepthSpinner);
 
-        optionsPanel.add(flagsRow);
-        optionsPanel.add(spinnersRow);
-
-        gbc.gridx = 1;
-        gbc.gridy = 6;
-        gbc.weightx = 1.0;
-        controlsPanel.add(optionsPanel, gbc);
-
-        // Buttons
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
         generateButton = new JButton("Generate Permutations");
         generateButton.setToolTipText("Execute mutation pipeline with active constraints and selected testing intent");
+        cancelButton = new JButton("Cancel");
+        cancelButton.setEnabled(false);
+        cancelButton.setToolTipText("Abort the current permutation generation process");
         JButton copyButton = new JButton("Copy Output");
         copyButton.setToolTipText("Copy all generated permutation results to system clipboard");
+        exportButton = new JButton("Export to File");
+        exportButton.setToolTipText("Save generated permutations directly to a file without clipboard size constraints");
         JButton clearButton = new JButton("Clear");
         clearButton.setToolTipText("Clear the target input, results list, and differential inspector fields");
         JButton helpButton = new JButton("Help & Guide (?)");
         helpButton.setToolTipText("Open the complete engine guide, testing intents, and mutation matrix");
 
         buttonPanel.add(generateButton);
+        buttonPanel.add(cancelButton);
         buttonPanel.add(copyButton);
+        buttonPanel.add(exportButton);
         buttonPanel.add(clearButton);
         buttonPanel.add(helpButton);
 
-        gbc.gridx = 1;
-        gbc.gridy = 7;
-        gbc.weightx = 1.0;
-        controlsPanel.add(buttonPanel, gbc);
+        actionBar.add(spinnersRow, BorderLayout.WEST);
+        actionBar.add(buttonPanel, BorderLayout.EAST);
 
-        JPanel topContainer = new JPanel(new BorderLayout(0, 8));
+        JPanel topContainer = new JPanel(new BorderLayout(0, 4));
         topContainer.add(headerPanel, BorderLayout.NORTH);
-        topContainer.add(controlsPanel, BorderLayout.CENTER);
-        topContainer.setMinimumSize(new Dimension(500, 180));
+        topContainer.add(tabbedPane, BorderLayout.CENTER);
+        topContainer.add(actionBar, BorderLayout.SOUTH);
+        topContainer.setMinimumSize(new Dimension(500, 150));
 
         JScrollPane topScrollPane = new JScrollPane(topContainer);
         topScrollPane.setBorder(BorderFactory.createEmptyBorder());
         topScrollPane.getVerticalScrollBar().setUnitIncrement(16);
         topScrollPane.getHorizontalScrollBar().setUnitIncrement(16);
-        topScrollPane.setMinimumSize(new Dimension(500, 150));
+        topScrollPane.setMinimumSize(new Dimension(500, 140));
 
         // Output Area
         outputArea = new JTextArea();
@@ -356,7 +355,9 @@ public class MainPanel extends JPanel {
 
         // Listeners
         generateButton.addActionListener(e -> onGenerate());
+        cancelButton.addActionListener(e -> onCancel());
         copyButton.addActionListener(e -> onCopy());
+        exportButton.addActionListener(e -> onExport());
         clearButton.addActionListener(e -> onClear());
         helpButton.addActionListener(e -> onHelp());
 
@@ -416,7 +417,10 @@ public class MainPanel extends JPanel {
             String original = inputField.getText().trim();
 
             if (!line.isEmpty() && !line.startsWith("[Notice]")) {
-                SwingWorker<ParserSimulator.SimulationResult, Void> worker = new SwingWorker<>() {
+                if (activeInspectorWorker != null && !activeInspectorWorker.isDone()) {
+                    activeInspectorWorker.cancel(true);
+                }
+                activeInspectorWorker = new SwingWorker<>() {
                     @Override
                     protected ParserSimulator.SimulationResult doInBackground() {
                         return simulator.simulate(line, original);
@@ -424,6 +428,7 @@ public class MainPanel extends JPanel {
 
                     @Override
                     protected void done() {
+                        if (isCancelled()) return;
                         try {
                             ParserSimulator.SimulationResult sim = get();
                             simUrlField.setText(sim.urlDecoded());
@@ -440,7 +445,7 @@ public class MainPanel extends JPanel {
                         } catch (Exception ignored) {}
                     }
                 };
-                worker.execute();
+                activeInspectorWorker.execute();
             }
         } catch (Exception ignored) {}
     }
@@ -480,10 +485,19 @@ public class MainPanel extends JPanel {
         return set;
     }
 
-    private void onGenerate() {
-        String input = inputField.getText().trim();
-        boolean isZeroInput = input.isEmpty();
+    private void checkConstraintConflicts() {
+        CharacterSetConstraint charset = getSelectedCharset();
+        Set<ArtifactCategory> cats = getSelectedCategories();
+        if (charset == CharacterSetConstraint.ALPHANUMERIC) {
+            conflictNoticeLabel.setText("Notice: Alphanumeric charset will filter out encodings, entities, and symbols.");
+        } else if (charset == CharacterSetConstraint.ASCII_ONLY && cats.contains(ArtifactCategory.UNICODE_HOMOGLYPHS)) {
+            conflictNoticeLabel.setText("Notice: ASCII Only charset will filter out non-ASCII Unicode homoglyphs.");
+        } else {
+            conflictNoticeLabel.setText(" ");
+        }
+    }
 
+    public ConstraintProfile getActiveProfile() {
         InputType selectedType = switch (typeSelector.getSelectedIndex()) {
             case 1 -> InputType.GENERIC_STRING;
             case 2 -> InputType.NUMERIC;
@@ -500,43 +514,44 @@ public class MainPanel extends JPanel {
             default -> GranularityMode.TOKEN_ONLY;
         };
 
-        TestingIntent selectedIntent = getSelectedIntent();
-        CharacterSetConstraint selectedCharset = getSelectedCharset();
-        Set<ArtifactCategory> selectedCategories = getSelectedCategories();
+        return ConstraintProfile.builder()
+                .inputType(selectedType)
+                .granularityMode(selectedGranularity)
+                .testingIntent(getSelectedIntent())
+                .characterSetConstraint(getSelectedCharset())
+                .enabledCategories(getSelectedCategories())
+                .allowNonPrintable(allowNonPrintableBox.isSelected())
+                .allowNullBytes(allowNullBytesBox.isSelected())
+                .preserveStructure(preserveStructureBox.isSelected())
+                .canonicalizePreEncoded(canonicalizeBox.isSelected())
+                .encodingLayers((Integer) layersSpinner.getValue())
+                .maxDepth((Integer) maxDepthSpinner.getValue())
+                .maxPermutations((Integer) maxPermsSpinner.getValue())
+                .build();
+    }
 
-        boolean allowNonPrintable = allowNonPrintableBox.isSelected();
-        boolean allowNullBytes = allowNullBytesBox.isSelected();
-        boolean canonicalize = canonicalizeBox.isSelected();
-        boolean preserveStructure = preserveStructureBox.isSelected();
-        int layers = (Integer) layersSpinner.getValue();
-        int maxPerms = (Integer) maxPermsSpinner.getValue();
-        int depth = (Integer) maxDepthSpinner.getValue();
+    private void onGenerate() {
+        String input = inputField.getText().trim();
+        boolean isZeroInput = input.isEmpty();
+        ConstraintProfile profile = getActiveProfile();
 
         generateButton.setEnabled(false);
+        cancelButton.setEnabled(true);
         statusLabel.setText(isZeroInput ? "Generating boundary archetype seeds..." : "Generating permutations...");
 
-        SwingWorker<List<String>, Void> worker = new SwingWorker<>() {
+        currentWorker = new SwingWorker<>() {
             @Override
             protected List<String> doInBackground() {
-                ConstraintProfile profile = ConstraintProfile.builder()
-                        .inputType(selectedType)
-                        .granularityMode(selectedGranularity)
-                        .testingIntent(selectedIntent)
-                        .characterSetConstraint(selectedCharset)
-                        .enabledCategories(selectedCategories)
-                        .allowNonPrintable(allowNonPrintable)
-                        .allowNullBytes(allowNullBytes)
-                        .preserveStructure(preserveStructure)
-                        .canonicalizePreEncoded(canonicalize)
-                        .encodingLayers(layers)
-                        .maxDepth(depth)
-                        .maxPermutations(maxPerms)
-                        .build();
                 return engine.generate(input, profile);
             }
 
             @Override
             protected void done() {
+                if (isCancelled()) {
+                    generateButton.setEnabled(true);
+                    cancelButton.setEnabled(false);
+                    return;
+                }
                 try {
                     List<String> results = get();
                     if (results.isEmpty()) {
@@ -559,10 +574,39 @@ public class MainPanel extends JPanel {
                     statusLabel.setText("Execution failed: " + ex.getMessage());
                 } finally {
                     generateButton.setEnabled(true);
+                    cancelButton.setEnabled(false);
                 }
             }
         };
-        worker.execute();
+        currentWorker.execute();
+    }
+
+    private void onCancel() {
+        if (currentWorker != null && !currentWorker.isDone()) {
+            currentWorker.cancel(true);
+            statusLabel.setText("Generation cancelled by user.");
+            generateButton.setEnabled(true);
+            cancelButton.setEnabled(false);
+        }
+    }
+
+    private void onExport() {
+        String text = outputArea.getText();
+        if (text.isEmpty() || text.startsWith("[Notice]")) {
+            JOptionPane.showMessageDialog(this, "No permutations to export.", "Export Notice", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Export Permutations to File");
+        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File file = chooser.getSelectedFile();
+            try (FileWriter writer = new FileWriter(file, StandardCharsets.UTF_8)) {
+                writer.write(text);
+                statusLabel.setText("Exported permutations to " + file.getName() + ".");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
     }
 
     private void onHelp() {

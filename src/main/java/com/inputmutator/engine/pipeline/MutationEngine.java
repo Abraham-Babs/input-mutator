@@ -258,7 +258,7 @@ public class MutationEngine {
                 Token singleCharToken = new Token(token.type(), charStr, currentOffset, currentOffset + charLen);
                 List<String> posList = new ArrayList<>();
 
-                List<Mutator> activeMutators = strategyDispatcher.filterApplicableMutators(mutators, singleCharToken, context);
+                List<Mutator> activeMutators = strategyDispatcher.filterApplicableMutators(mutators, singleCharToken, context, true);
                 for (Mutator mutator : activeMutators) {
                     List<String> variations = mutator.mutate(singleCharToken, context);
                     for (String var : variations) {
@@ -462,7 +462,7 @@ public class MutationEngine {
 
     private List<String> getQuickVariations(Token singleToken, TransformationContext context, int offset) {
         List<String> quick = new ArrayList<>();
-        List<Mutator> activeMutators = strategyDispatcher.filterApplicableMutators(mutators, singleToken, context);
+        List<Mutator> activeMutators = strategyDispatcher.filterApplicableMutators(mutators, singleToken, context, true);
         int mutatorCount = activeMutators.size();
         if (mutatorCount == 0) return quick;
         for (int i = 0; i < mutatorCount; i++) {

@@ -21,6 +21,11 @@ public class EmailDifferentialMutator implements Mutator {
     }
 
     @Override
+    public boolean supportsCharacterLevel() {
+        return false;
+    }
+
+    @Override
     public boolean appliesTo(Token token, TransformationContext context) {
         return token.type() == TokenType.EMAIL_LOCAL;
     }
