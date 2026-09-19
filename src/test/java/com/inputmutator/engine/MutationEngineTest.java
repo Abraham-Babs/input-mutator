@@ -1,6 +1,7 @@
 package com.inputmutator.engine;
 
 import com.inputmutator.engine.constraint.ConstraintProfile;
+import com.inputmutator.engine.model.GranularityMode;
 import com.inputmutator.engine.model.InputType;
 import com.inputmutator.engine.pipeline.MutationEngine;
 import org.junit.jupiter.api.BeforeEach;
@@ -190,4 +191,144 @@ class MutationEngineTest {
         // Should produce variations based on canonical 'admin' (such as homoglyphs or alternate encodings)
         assertNotNull(results);
     }
+
+    @Test
+    void testDependencyInjectionAndDefensiveCopying() {
+        var mutatorsList = new java.util.ArrayList<com.inputmutator.engine.pipeline.Mutator>();
+        mutatorsList.add(new com.inputmutator.engine.pipeline.mutators.UnicodeMutator());
+
+        var customEngine = new MutationEngine(
+                new com.inputmutator.engine.tokenizer.InputTokenizer(),
+                new com.inputmutator.engine.constraint.ConstraintValidator(),
+                mutatorsList,
+                new com.inputmutator.engine.pipeline.SeedGenerator(),
+                new com.inputmutator.engine.encoding.EncodingDetector(),
+                new com.inputmutator.engine.encoding.Canonicalizer()
+        );
+
+        // Mutating external list should not affect internal state
+        mutatorsList.clear();
+
+        ConstraintProfile profile = ConstraintProfile.builder()
+                .inputType(InputType.GENERIC_STRING)
+                .maxPermutations(10)
+                .build();
+        List<String> results = customEngine.generate("admin", profile);
+        assertFalse(results.isEmpty());
+
+        // Null checks
+        assertThrows(NullPointerException.class, () -> new MutationEngine(null, null, null));
+        assertThrows(NullPointerException.class, () -> engine.generate("test", null));
+    }
+
+    @Test
+    void testCombinatorialWithConfigurablePositions() {
+        ConstraintProfile profile3Pos = ConstraintProfile.builder()
+                .granularityMode(com.inputmutator.engine.model.GranularityMode.COMBINATORIAL)
+                .maxPositionsMutated(3)
+                .maxPermutations(50)
+                .build();
+
+        List<String> results3 = engine.generate("testing", profile3Pos);
+        assertFalse(results3.isEmpty());
+
+        ConstraintProfile profile1Pos = ConstraintProfile.builder()
+                .granularityMode(com.inputmutator.engine.model.GranularityMode.COMBINATORIAL)
+                .maxPositionsMutated(1)
+                .maxPermutations(50)
+                .build();
+
+        List<String> results1 = engine.generate("testing", profile1Pos);
+        assertFalse(results1.isEmpty());
+    }
+
+    @Test
+    void testConstraintProfileToBuilderPreservesFields() {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^[a-z]+$");
+        ConstraintProfile original = ConstraintProfile.builder()
+                .inputType(InputType.NUMERIC)
+                .maxPositionsMutated(3)
+                .encodingLayers(2)
+                .minLength(5)
+                .maxLength(50)
+                .allowNonPrintable(true)
+                .allowNullBytes(true)
+                .preserveStructure(false)
+                .maxDepth(4)
+                .maxPermutations(75)
+                .allowedPattern(pattern)
+                .build();
+
+        ConstraintProfile derived = original.toBuilder()
+                .inputType(InputType.GENERIC_STRING)
+                .build();
+
+        assertEquals(InputType.GENERIC_STRING, derived.inputType());
+        assertEquals(original.maxPositionsMutated(), derived.maxPositionsMutated());
+        assertEquals(original.encodingLayers(), derived.encodingLayers());
+        assertEquals(original.minLength(), derived.minLength());
+        assertEquals(original.maxLength(), derived.maxLength());
+        assertEquals(original.allowNonPrintable(), derived.allowNonPrintable());
+        assertEquals(original.allowNullBytes(), derived.allowNullBytes());
+        assertEquals(original.preserveStructure(), derived.preserveStructure());
+        assertEquals(original.maxDepth(), derived.maxDepth());
+        assertEquals(original.maxPermutations(), derived.maxPermutations());
+        assertEquals(original.allowedPattern(), derived.allowedPattern());
+    }
+
+    @Test
+    void testNumericSingleAndCombinatorialPositions() {
+        ConstraintProfile singleProfile = ConstraintProfile.builder()
+                .granularityMode(GranularityMode.SINGLE_POSITION)
+                .maxPermutations(20)
+                .build();
+
+        List<String> singleResults = engine.generate("1,2,3,4,5", singleProfile);
+        assertNotNull(singleResults);
+        assertFalse(singleResults.isEmpty(), "Single position granularity must generate permutations for inputs with numeric tokens");
+
+        ConstraintProfile comboProfile = ConstraintProfile.builder()
+                .granularityMode(GranularityMode.COMBINATORIAL)
+                .maxPositionsMutated(2)
+                .maxPermutations(20)
+                .build();
+
+        List<String> comboResults = engine.generate("1,2,3,4,5", comboProfile);
+        assertNotNull(comboResults);
+        assertFalse(comboResults.isEmpty(), "Combinatorial granularity must generate permutations for inputs with numeric tokens");
+    }
+
+    @Test
+    void testCombinatorialProducesDistinctMultiPositionMutations() {
+        ConstraintProfile singleProfile = ConstraintProfile.builder()
+                .granularityMode(GranularityMode.SINGLE_POSITION)
+                .maxPermutations(50)
+                .build();
+        List<String> singleResults = engine.generate("admin", singleProfile);
+
+        ConstraintProfile comboProfile = ConstraintProfile.builder()
+                .granularityMode(GranularityMode.COMBINATORIAL)
+                .maxPositionsMutated(2)
+                .maxPermutations(50)
+                .build();
+        List<String> comboResults = engine.generate("admin", comboProfile);
+
+        assertFalse(comboResults.isEmpty());
+        // Verify that combinatorial mode is not identical to single-position mode
+        boolean hasMultiCharVariant = comboResults.stream().anyMatch(r -> !singleResults.contains(r));
+        assertTrue(hasMultiCharVariant, "Combinatorial mode must produce multi-character combinations not present in single-position");
+    }
+
+    @Test
+    void testUncappedNaturalExhaustion() {
+        ConstraintProfile uncappedProfile = ConstraintProfile.builder()
+                .maxPermutations(0) // 0 = unlimited / natural exhaustion
+                .build();
+
+        assertTrue(uncappedProfile.isUncapped());
+        List<String> results = engine.generate("test", uncappedProfile);
+        assertFalse(results.isEmpty());
+        assertTrue(results.size() > 10, "Uncapped generation should run to natural exhaustion");
+    }
 }
+

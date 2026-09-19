@@ -15,6 +15,13 @@ public interface Mutator {
     String name();
 
     /**
+     * Category for strategy selection and intent-based filtering.
+     */
+    default com.inputmutator.engine.model.ArtifactCategory category() {
+        return com.inputmutator.engine.model.ArtifactCategory.GRAMMAR_DIFFERENTIAL;
+    }
+
+    /**
      * Determines whether this mutator can process the given token under the current context.
      */
     boolean appliesTo(Token token, TransformationContext context);

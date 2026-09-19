@@ -65,8 +65,10 @@ class ConstraintValidatorTest {
                 .build();
 
         assertTrue(validator.isValid("user@domain.com", emailProfile));
+        assertTrue(validator.isValid("\"user@escaped\"@domain.com", emailProfile));
         assertFalse(validator.isValid("userdomain.com", emailProfile));
         assertFalse(validator.isValid("@domain.com", emailProfile));
+        assertFalse(validator.isValid("user@@domain.com", emailProfile));
     }
 
     @Test
@@ -79,5 +81,26 @@ class ConstraintValidatorTest {
         assertTrue(validator.isValid("{\"key\": \"val\"}", jsonProfile));
         assertTrue(validator.isValid("[1, 2, 3]", jsonProfile));
         assertFalse(validator.isValid("{\"key\": \"val\"", jsonProfile));
+        assertFalse(validator.isValid("{\"key\": \"val\"]", jsonProfile)); // mismatched brace/bracket
+        assertFalse(validator.isValid("{\"key\": \"val", jsonProfile)); // unclosed string
+    }
+
+    @Test
+    void testPreserveNumericStructure() {
+        ConstraintProfile numProfile = ConstraintProfile.builder()
+                .inputType(InputType.NUMERIC)
+                .preserveStructure(true)
+                .build();
+
+        assertTrue(validator.isValid("42", numProfile));
+        assertTrue(validator.isValid("-0.0", numProfile));
+        assertTrue(validator.isValid(".5", numProfile));
+        assertTrue(validator.isValid("NaN", numProfile));
+        assertTrue(validator.isValid("Infinity", numProfile));
+        assertTrue(validator.isValid("-Infinity", numProfile));
+        assertTrue(validator.isValid("0x1A", numProfile));
+        assertTrue(validator.isValid("1e-308", numProfile));
+        assertFalse(validator.isValid("42a", numProfile));
+        assertFalse(validator.isValid("abc", numProfile));
     }
 }

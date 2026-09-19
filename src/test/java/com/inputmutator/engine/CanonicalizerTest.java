@@ -43,4 +43,11 @@ class CanonicalizerTest {
         String full = canonicalizer.fullCanonicalize(doubleEncoded);
         assertEquals("admin", full.toLowerCase());
     }
+
+    @Test
+    void testCanonicalizeMultibyteUtf8() {
+        // UTF-8 %C3%A9 = é, %E2%82%AC = €
+        String decoded = canonicalizer.canonicalize("caf%C3%A9%20%E2%82%AC10");
+        assertEquals("café €10", decoded);
+    }
 }

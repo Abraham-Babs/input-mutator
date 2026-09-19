@@ -1,8 +1,13 @@
 package com.inputmutator.engine.constraint;
 
+import com.inputmutator.engine.model.ArtifactCategory;
 import com.inputmutator.engine.model.GranularityMode;
 import com.inputmutator.engine.model.InputType;
+import com.inputmutator.engine.model.TestingIntent;
 
+import java.util.EnumSet;
+import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -21,7 +26,10 @@ public record ConstraintProfile(
         boolean preserveStructure,
         int maxDepth,
         int maxPermutations,
-        Pattern allowedPattern
+        Pattern allowedPattern,
+        TestingIntent testingIntent,
+        Set<ArtifactCategory> enabledCategories,
+        CharacterSetConstraint characterSetConstraint
 ) {
 
     public static final int DEFAULT_MIN_LENGTH = 0;
@@ -31,12 +39,40 @@ public record ConstraintProfile(
     public static final int DEFAULT_MAX_POSITIONS = 2;
     public static final int DEFAULT_ENCODING_LAYERS = 1;
 
+    public boolean isUncapped() {
+        return maxPermutations <= 0;
+    }
+
+    public boolean isCategoryEnabled(ArtifactCategory category) {
+        return enabledCategories == null || enabledCategories.contains(category);
+    }
+
     public static ConstraintProfile defaultProfile() {
         return new Builder().build();
     }
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    public Builder toBuilder() {
+        return new Builder()
+                .inputType(this.inputType)
+                .granularityMode(this.granularityMode)
+                .maxPositionsMutated(this.maxPositionsMutated)
+                .canonicalizePreEncoded(this.canonicalizePreEncoded)
+                .encodingLayers(this.encodingLayers)
+                .minLength(this.minLength)
+                .maxLength(this.maxLength)
+                .allowNonPrintable(this.allowNonPrintable)
+                .allowNullBytes(this.allowNullBytes)
+                .preserveStructure(this.preserveStructure)
+                .maxDepth(this.maxDepth)
+                .maxPermutations(this.maxPermutations)
+                .allowedPattern(this.allowedPattern)
+                .testingIntent(this.testingIntent)
+                .enabledCategories(this.enabledCategories)
+                .characterSetConstraint(this.characterSetConstraint);
     }
 
     public static class Builder {
@@ -53,6 +89,9 @@ public record ConstraintProfile(
         private int maxDepth = DEFAULT_MAX_DEPTH;
         private int maxPermutations = DEFAULT_MAX_PERMUTATIONS;
         private Pattern allowedPattern = null;
+        private TestingIntent testingIntent = TestingIntent.BLACKLIST_EVASION;
+        private Set<ArtifactCategory> enabledCategories = EnumSet.allOf(ArtifactCategory.class);
+        private CharacterSetConstraint characterSetConstraint = CharacterSetConstraint.ANY;
 
         public Builder inputType(InputType inputType) {
             this.inputType = inputType;
@@ -110,7 +149,7 @@ public record ConstraintProfile(
         }
 
         public Builder maxPermutations(int maxPermutations) {
-            this.maxPermutations = Math.max(1, maxPermutations);
+            this.maxPermutations = maxPermutations;
             return this;
         }
 
@@ -121,6 +160,26 @@ public record ConstraintProfile(
 
         public Builder allowedPattern(String regex) {
             this.allowedPattern = (regex != null && !regex.isBlank()) ? Pattern.compile(regex) : null;
+            return this;
+        }
+
+        public Builder testingIntent(TestingIntent intent) {
+            if (intent != null) {
+                this.testingIntent = intent;
+                this.enabledCategories = EnumSet.copyOf(intent.defaultCategories());
+            }
+            return this;
+        }
+
+        public Builder enabledCategories(Set<ArtifactCategory> categories) {
+            if (categories != null && !categories.isEmpty()) {
+                this.enabledCategories = EnumSet.copyOf(categories);
+            }
+            return this;
+        }
+
+        public Builder characterSetConstraint(CharacterSetConstraint constraint) {
+            this.characterSetConstraint = (constraint != null) ? constraint : CharacterSetConstraint.ANY;
             return this;
         }
 
@@ -138,7 +197,10 @@ public record ConstraintProfile(
                     preserveStructure,
                     maxDepth,
                     maxPermutations,
-                    allowedPattern
+                    allowedPattern,
+                    testingIntent,
+                    enabledCategories,
+                    characterSetConstraint
             );
         }
     }

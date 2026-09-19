@@ -40,11 +40,7 @@ public class ParserSimulator {
 
         String nfkc = Normalizer.normalize(mutation, Normalizer.Form.NFKC);
 
-        String htmlUnescaped = mutation.replace("&quot;", "\"")
-                                       .replace("&apos;", "'")
-                                       .replace("&lt;", "<")
-                                       .replace("&gt;", ">")
-                                       .replace("&amp;", "&");
+        String htmlUnescaped = canonicalizer.decodeHtmlEntities(mutation);
 
         String full = canonicalizer.fullCanonicalize(mutation);
 

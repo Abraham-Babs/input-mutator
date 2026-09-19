@@ -74,7 +74,7 @@ public class Canonicalizer {
         return sb.toString();
     }
 
-    private String decodeHtmlEntities(String s) {
+    public String decodeHtmlEntities(String s) {
         String res = s.replace("&quot;", "\"")
                       .replace("&apos;", "'")
                       .replace("&lt;", "<")
@@ -101,17 +101,34 @@ public class Canonicalizer {
     }
 
     private String decodeUrlPercents(String s) {
-        Matcher m = URL_PERCENT_PAT.matcher(s);
         StringBuilder sb = new StringBuilder();
-        while (m.find()) {
-            try {
-                int b = Integer.parseInt(m.group(1), 16);
-                m.appendReplacement(sb, Matcher.quoteReplacement(new String(new byte[]{(byte) b}, StandardCharsets.UTF_8)));
-            } catch (Exception ignored) {
-                m.appendReplacement(sb, m.group(0));
+        int len = s.length();
+        int i = 0;
+        java.io.ByteArrayOutputStream byteBuf = new java.io.ByteArrayOutputStream();
+
+        while (i < len) {
+            if (s.charAt(i) == '%' && i + 2 < len && isHex(s.charAt(i + 1)) && isHex(s.charAt(i + 2))) {
+                try {
+                    int b = Integer.parseInt(s.substring(i + 1, i + 3), 16);
+                    byteBuf.write(b);
+                    i += 3;
+                    continue;
+                } catch (Exception ignored) {}
             }
+            if (byteBuf.size() > 0) {
+                sb.append(byteBuf.toString(StandardCharsets.UTF_8));
+                byteBuf.reset();
+            }
+            sb.append(s.charAt(i));
+            i++;
         }
-        m.appendTail(sb);
+        if (byteBuf.size() > 0) {
+            sb.append(byteBuf.toString(StandardCharsets.UTF_8));
+        }
         return sb.toString();
+    }
+
+    private static boolean isHex(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }
 }

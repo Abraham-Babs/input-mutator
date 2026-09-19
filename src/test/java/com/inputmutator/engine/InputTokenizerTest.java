@@ -60,4 +60,12 @@ class InputTokenizerTest {
 
         assertTrue(tokens.stream().anyMatch(t -> t.type() == TokenType.CONTROL_CHAR));
     }
+
+    @Test
+    void testTokenizeAlphanumericIdentifier() {
+        List<Token> tokens = tokenizer.tokenize("user123", InputType.GENERIC_STRING);
+        assertEquals(1, tokens.size());
+        assertEquals(TokenType.LITERAL, tokens.get(0).type());
+        assertEquals("user123", tokens.get(0).value());
+    }
 }

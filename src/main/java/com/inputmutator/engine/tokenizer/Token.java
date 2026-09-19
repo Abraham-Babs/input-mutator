@@ -16,8 +16,4 @@ public record Token(TokenType type, String value, int startIndex, int endIndex) 
             throw new IllegalArgumentException("Invalid token offsets: [" + startIndex + ", " + endIndex + "]");
         }
     }
-
-    public int length() {
-        return value.length();
-    }
 }

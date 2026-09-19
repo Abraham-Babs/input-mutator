@@ -43,6 +43,11 @@ public class NonPrintableMutator implements Mutator {
     }
 
     @Override
+    public com.inputmutator.engine.model.ArtifactCategory category() {
+        return com.inputmutator.engine.model.ArtifactCategory.CONTROL_NON_PRINTABLE;
+    }
+
+    @Override
     public boolean appliesTo(Token token, TransformationContext context) {
         return !token.value().isEmpty();
     }
