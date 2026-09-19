@@ -1,6 +1,7 @@
 package com.inputmutator.engine;
 
 import com.inputmutator.engine.constraint.ConstraintProfile;
+import com.inputmutator.engine.model.GranularityMode;
 import com.inputmutator.engine.model.InputType;
 import com.inputmutator.engine.pipeline.MutationEngine;
 import org.junit.jupiter.api.BeforeEach;
@@ -274,4 +275,27 @@ class MutationEngineTest {
         assertEquals(original.maxPermutations(), derived.maxPermutations());
         assertEquals(original.allowedPattern(), derived.allowedPattern());
     }
+
+    @Test
+    void testNumericSingleAndCombinatorialPositions() {
+        ConstraintProfile singleProfile = ConstraintProfile.builder()
+                .granularityMode(GranularityMode.SINGLE_POSITION)
+                .maxPermutations(20)
+                .build();
+
+        List<String> singleResults = engine.generate("1,2,3,4,5", singleProfile);
+        assertNotNull(singleResults);
+        assertFalse(singleResults.isEmpty(), "Single position granularity must generate permutations for inputs with numeric tokens");
+
+        ConstraintProfile comboProfile = ConstraintProfile.builder()
+                .granularityMode(GranularityMode.COMBINATORIAL)
+                .maxPositionsMutated(2)
+                .maxPermutations(20)
+                .build();
+
+        List<String> comboResults = engine.generate("1,2,3,4,5", comboProfile);
+        assertNotNull(comboResults);
+        assertFalse(comboResults.isEmpty(), "Combinatorial granularity must generate permutations for inputs with numeric tokens");
+    }
 }
+

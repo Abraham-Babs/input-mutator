@@ -196,7 +196,7 @@ public class MutationEngine {
         List<Token> tokens = tokenizer.tokenize(input, profile.inputType());
 
         for (Token token : tokens) {
-            if (!isPositionCandidate(token)) {
+            if (!isPositionCandidate(token, profile)) {
                 continue;
             }
 
@@ -255,7 +255,7 @@ public class MutationEngine {
 
         List<Token> tokens = tokenizer.tokenize(input, profile.inputType());
         for (Token token : tokens) {
-            if (!isPositionCandidate(token)) continue;
+            if (!isPositionCandidate(token, profile)) continue;
 
             // 2. All-character simultaneous mutations (full token transforms)
             if (token.value().length() > 1) {
@@ -410,10 +410,12 @@ public class MutationEngine {
         return quick;
     }
 
-    private boolean isPositionCandidate(Token token) {
+    private boolean isPositionCandidate(Token token, ConstraintProfile profile) {
         TokenType t = token.type();
-        return t == TokenType.LITERAL || t == TokenType.EMAIL_LOCAL ||
-               t == TokenType.JSON_VALUE || t == TokenType.JSON_KEY ||
-               t == TokenType.SPECIAL_CHAR;
+        if (t == TokenType.LITERAL || t == TokenType.NUMERIC || t == TokenType.EMAIL_LOCAL ||
+            t == TokenType.JSON_VALUE || t == TokenType.JSON_KEY || t == TokenType.SPECIAL_CHAR) {
+            return true;
+        }
+        return !profile.preserveStructure() && t == TokenType.DELIMITER;
     }
 }

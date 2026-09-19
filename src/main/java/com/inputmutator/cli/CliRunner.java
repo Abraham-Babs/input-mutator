@@ -37,6 +37,7 @@ public class CliRunner {
         boolean allowNonPrintable = hasFlag(args, "--allow-non-printable");
         boolean allowNullBytes = hasFlag(args, "--allow-null-bytes");
         boolean noCanonicalize = hasFlag(args, "--no-canonicalize");
+        boolean noPreserveStructure = hasFlag(args, "--no-preserve-structure");
 
         ConstraintProfile profile = ConstraintProfile.builder()
                 .inputType(inputType)
@@ -44,6 +45,7 @@ public class CliRunner {
                 .maxPositionsMutated(maxPositions)
                 .encodingLayers(encodingLayers)
                 .canonicalizePreEncoded(!noCanonicalize)
+                .preserveStructure(!noPreserveStructure)
                 .maxDepth(maxDepth)
                 .maxPermutations(maxPermutations)
                 .allowNonPrintable(allowNonPrintable)
@@ -151,6 +153,7 @@ public class CliRunner {
         System.out.println("  --allow-non-printable       Allow unescaped C0/C1 control codes and lone surrogates");
         System.out.println("  --allow-null-bytes          Allow raw unescaped NUL (\\0) bytes");
         System.out.println("  --no-canonicalize           Disable auto-canonicalization of pre-encoded inputs");
+        System.out.println("  --no-preserve-structure     Allow mutations to break semantic delimiter boundaries");
         System.out.println();
         System.out.println("Examples:");
         System.out.println("  # 1. Sliding-window keyword filter testing (mutate 1 char at a time):");

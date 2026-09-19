@@ -22,6 +22,7 @@ public class MainPanel extends JPanel {
     private final JCheckBox allowNonPrintableBox;
     private final JCheckBox allowNullBytesBox;
     private final JCheckBox canonicalizeBox;
+    private final JCheckBox preserveStructureBox;
     private final JSpinner layersSpinner;
     private final JSpinner maxPermsSpinner;
     private final JSpinner maxDepthSpinner;
@@ -109,6 +110,8 @@ public class MainPanel extends JPanel {
         canonicalizeBox = new JCheckBox("Canonicalize Pre-Encoded", true);
 
         optionsPanel.add(canonicalizeBox);
+        preserveStructureBox = new JCheckBox("Preserve Structure", true);
+        optionsPanel.add(preserveStructureBox);
         optionsPanel.add(allowNonPrintableBox);
         optionsPanel.add(allowNullBytesBox);
 
@@ -276,6 +279,7 @@ public class MainPanel extends JPanel {
         boolean allowNonPrintable = allowNonPrintableBox.isSelected();
         boolean allowNullBytes = allowNullBytesBox.isSelected();
         boolean canonicalize = canonicalizeBox.isSelected();
+        boolean preserveStructure = preserveStructureBox.isSelected();
         int layers = (Integer) layersSpinner.getValue();
         int maxPerms = (Integer) maxPermsSpinner.getValue();
         int depth = (Integer) maxDepthSpinner.getValue();
@@ -291,6 +295,7 @@ public class MainPanel extends JPanel {
                         .granularityMode(selectedGranularity)
                         .allowNonPrintable(allowNonPrintable)
                         .allowNullBytes(allowNullBytes)
+                        .preserveStructure(preserveStructure)
                         .canonicalizePreEncoded(canonicalize)
                         .encodingLayers(layers)
                         .maxDepth(depth)
