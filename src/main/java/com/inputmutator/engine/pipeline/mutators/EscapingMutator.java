@@ -40,21 +40,33 @@ public class EscapingMutator implements Mutator {
         Set<String> results = new LinkedHashSet<>();
 
         // 1. URL Percent-Encoding (single, uppercase, lowercase)
-        StringBuilder urlEncUpper = new StringBuilder();
-        StringBuilder urlEncLower = new StringBuilder();
-        StringBuilder doubleEnc = new StringBuilder();
-        byte[] bytes = val.getBytes(StandardCharsets.UTF_8);
+        if (context.profile().isCategoryEnabled(com.inputmutator.engine.model.ArtifactCategory.URL_ENCODING)) {
+            StringBuilder urlEncUpper = new StringBuilder();
+            StringBuilder urlEncLower = new StringBuilder();
+            StringBuilder doubleEnc = new StringBuilder();
+            int layers = context.profile().encodingLayers();
+            StringBuilder tripleEnc = new StringBuilder();
+            byte[] bytes = val.getBytes(StandardCharsets.UTF_8);
 
-        for (byte b : bytes) {
-            String hexUpper = String.format("%02X", b);
-            String hexLower = String.format("%02x", b);
-            urlEncUpper.append("%").append(hexUpper);
-            urlEncLower.append("%").append(hexLower);
-            doubleEnc.append("%25").append(hexUpper);
+            for (byte b : bytes) {
+                String hexUpper = String.format("%02X", b);
+                String hexLower = String.format("%02x", b);
+                urlEncUpper.append("%").append(hexUpper);
+                urlEncLower.append("%").append(hexLower);
+                doubleEnc.append("%25").append(hexUpper);
+                if (layers >= 3) {
+                    tripleEnc.append("%2525").append(hexUpper);
+                }
+            }
+            results.add(urlEncUpper.toString());
+            results.add(urlEncLower.toString());
+            if (layers >= 2) {
+                results.add(doubleEnc.toString());
+            }
+            if (layers >= 3 && !tripleEnc.isEmpty()) {
+                results.add(tripleEnc.toString());
+            }
         }
-        results.add(urlEncUpper.toString());
-        results.add(urlEncLower.toString());
-        results.add(doubleEnc.toString());
 
         // 2. Unicode escape sequences (\\u followed by 4 hex digits or surrogate pairs)
         StringBuilder uniEscLower = new StringBuilder();
@@ -103,21 +115,32 @@ public class EscapingMutator implements Mutator {
             results.add(octEsc.toString());
         }
 
-        // 4. HTML Entities (for single characters / delimiters)
-        if (val.codePointCount(0, val.length()) == 1) {
-            int cp = val.codePointAt(0);
-            if (cp == '"' || cp == '\'' || cp == '<' || cp == '>' || cp == '&') {
-                String named = HTML_NAMED.get((char) cp);
-                if (named != null) {
-                    results.add(named);
+        // 4. HTML Entities (single characters and full tokens)
+        if (context.profile().isCategoryEnabled(com.inputmutator.engine.model.ArtifactCategory.HTML_ENTITIES)) {
+            if (val.codePointCount(0, val.length()) == 1) {
+                int cp = val.codePointAt(0);
+                if (cp == '"' || cp == '\'' || cp == '<' || cp == '>' || cp == '&') {
+                    String named = HTML_NAMED.get((char) cp);
+                    if (named != null) {
+                        results.add(named);
+                    }
                 }
+                results.add("&#" + cp + ";");
+                results.add("&#0000" + cp + ";");
+                results.add(String.format("&#%08d;", cp)); // 8-digit overlong zero-padded decimal
+                results.add("&#x" + Integer.toHexString(cp) + ";");
+                results.add(String.format("&#x%08x;", cp)); // 8-digit overlong zero-padded hex
+                results.add("&#X" + Integer.toHexString(cp).toUpperCase() + ";");
+            } else if (val.length() <= 32) {
+                StringBuilder htmlDec = new StringBuilder();
+                StringBuilder htmlHex = new StringBuilder();
+                for (int cp : val.codePoints().toArray()) {
+                    htmlDec.append("&#").append(cp).append(";");
+                    htmlHex.append("&#x").append(Integer.toHexString(cp)).append(";");
+                }
+                results.add(htmlDec.toString());
+                results.add(htmlHex.toString());
             }
-            results.add("&#" + cp + ";");
-            results.add("&#0000" + cp + ";");
-            results.add(String.format("&#%08d;", cp)); // 8-digit overlong zero-padded decimal
-            results.add("&#x" + Integer.toHexString(cp) + ";");
-            results.add(String.format("&#x%08x;", cp)); // 8-digit overlong zero-padded hex
-            results.add("&#X" + Integer.toHexString(cp).toUpperCase() + ";");
         }
 
         // 5. Slash alternatives and JSON escaped slash
@@ -125,6 +148,23 @@ public class EscapingMutator implements Mutator {
             results.add(val.replace("/", "\\/"));
             results.add(val.replace("/", "\u2044")); // Unicode Fraction Slash
             results.add(val.replace("/", "\u2215")); // Unicode Division Slash
+        }
+
+        // 6. Overlong UTF-8 encodings for ASCII tokens and delimiters
+        if (context.profile().isCategoryEnabled(com.inputmutator.engine.model.ArtifactCategory.OVERLONG_UTF8)) {
+            boolean isAllAscii = val.chars().allMatch(c -> c < 128);
+            if (isAllAscii && !val.isEmpty() && val.length() <= 16) {
+                StringBuilder overlong2 = new StringBuilder();
+                StringBuilder overlong3 = new StringBuilder();
+                for (char c : val.toCharArray()) {
+                    int b = (int) c;
+                    overlong2.append(String.format("%%%02X%%%02X", 0xC0 | (b >> 6), 0x80 | (b & 0x3F)));
+                    overlong3.append(String.format("%%%02X%%%02X%%%02X", 0xE0, 0x80 | (b >> 6), 0x80 | (b & 0x3F)));
+                }
+                results.add(overlong2.toString().toLowerCase());
+                results.add(overlong2.toString().toUpperCase());
+                results.add(overlong3.toString().toLowerCase());
+            }
         }
 
         results.remove(val);

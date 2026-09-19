@@ -41,6 +41,8 @@ public class MutationEngine {
     private final SeedGenerator seedGenerator;
     private final EncodingDetector encodingDetector;
     private final Canonicalizer canonicalizer;
+    private final StrategyDispatcher strategyDispatcher;
+    private final LayeredCompositionEngine layeredCompositionEngine;
 
     public MutationEngine() {
         this(
@@ -71,12 +73,27 @@ public class MutationEngine {
             EncodingDetector encodingDetector,
             Canonicalizer canonicalizer
     ) {
+        this(tokenizer, validator, mutators, seedGenerator, encodingDetector, canonicalizer, new StrategyDispatcher(), new LayeredCompositionEngine());
+    }
+
+    public MutationEngine(
+            InputTokenizer tokenizer,
+            ConstraintValidator validator,
+            List<Mutator> mutators,
+            SeedGenerator seedGenerator,
+            EncodingDetector encodingDetector,
+            Canonicalizer canonicalizer,
+            StrategyDispatcher strategyDispatcher,
+            LayeredCompositionEngine layeredCompositionEngine
+    ) {
         this.tokenizer = Objects.requireNonNull(tokenizer, "tokenizer must not be null");
         this.validator = Objects.requireNonNull(validator, "validator must not be null");
         this.mutators = List.copyOf(Objects.requireNonNull(mutators, "mutators must not be null"));
         this.seedGenerator = Objects.requireNonNull(seedGenerator, "seedGenerator must not be null");
         this.encodingDetector = Objects.requireNonNull(encodingDetector, "encodingDetector must not be null");
         this.canonicalizer = Objects.requireNonNull(canonicalizer, "canonicalizer must not be null");
+        this.strategyDispatcher = Objects.requireNonNull(strategyDispatcher, "strategyDispatcher must not be null");
+        this.layeredCompositionEngine = Objects.requireNonNull(layeredCompositionEngine, "layeredCompositionEngine must not be null");
     }
 
     /**
@@ -85,21 +102,43 @@ public class MutationEngine {
     public List<String> generate(String input, ConstraintProfile profile) {
         Objects.requireNonNull(profile, "profile must not be null");
 
-        // Zero-input scenario: generate archetype seeds for chosen profile
+        // Zero-input scenario: generate archetype seeds and mutate each through the active pipeline
         if (input == null || input.isBlank()) {
             List<String> seeds = seedGenerator.generateSeeds(profile);
             Set<String> aggregated = new LinkedHashSet<>();
+
+            // Step 1: Collect valid base archetype seeds
             for (String seed : seeds) {
                 if (validator.isValid(seed, profile)) {
                     aggregated.add(seed);
                 }
-                if (aggregated.size() >= profile.maxPermutations()) {
+                if (isLimitReached(aggregated.size(), profile)) {
+                    return new ArrayList<>(aggregated);
+                }
+            }
+
+            // Step 2: Actively mutate each seed through the engine to populate full permutation quota
+            for (String seed : seeds) {
+                if (isLimitReached(aggregated.size(), profile)) {
                     break;
+                }
+                List<String> seedPermutations = generateForTarget(seed, profile);
+                for (String perm : seedPermutations) {
+                    if (validator.isValid(perm, profile)) {
+                        aggregated.add(perm);
+                    }
+                    if (isLimitReached(aggregated.size(), profile)) {
+                        break;
+                    }
                 }
             }
             return new ArrayList<>(aggregated);
         }
 
+        return generateForTarget(input, profile);
+    }
+
+    private List<String> generateForTarget(String input, ConstraintProfile profile) {
         if (input.length() > MAX_INPUT_CEILING) {
             throw new IllegalArgumentException(
                     "Input length (" + input.length() + ") exceeds maximum safety threshold of " + MAX_INPUT_CEILING + " characters."
@@ -136,24 +175,33 @@ public class MutationEngine {
         return new ArrayList<>(resultSet);
     }
 
+    private boolean isLimitReached(int currentSize, ConstraintProfile profile) {
+        return !profile.isUncapped() && currentSize >= profile.maxPermutations();
+    }
+
     private void generateTokenBfs(String input, ConstraintProfile activeProfile, InputType effectiveType,
                                   TransformationContext context, Set<String> resultSet) {
         record QueueItem(String text, int depth) {}
         Queue<QueueItem> queue = new ArrayDeque<>();
         queue.add(new QueueItem(input, 0));
 
-        while (!queue.isEmpty() && resultSet.size() < activeProfile.maxPermutations()) {
+        while (!queue.isEmpty() && !isLimitReached(resultSet.size(), activeProfile)) {
             QueueItem current = queue.poll();
             List<Token> tokens = tokenizer.tokenize(current.text(), effectiveType);
 
             for (Token token : tokens) {
                 List<List<String>> mutatorVariations = new ArrayList<>();
-                for (Mutator mutator : mutators) {
-                    if (mutator.appliesTo(token, context)) {
-                        List<String> vars = mutator.mutate(token, context);
-                        if (!vars.isEmpty()) {
-                            mutatorVariations.add(vars);
-                        }
+                List<Mutator> activeMutators = strategyDispatcher.filterApplicableMutators(mutators, token, context);
+                for (Mutator mutator : activeMutators) {
+                    List<String> vars = mutator.mutate(token, context);
+                    if (!vars.isEmpty()) {
+                        mutatorVariations.add(vars);
+                    }
+                }
+                if (context.profile().encodingLayers() >= 2) {
+                    List<String> layered = layeredCompositionEngine.composeLayers(token, context, activeMutators);
+                    if (!layered.isEmpty()) {
+                        mutatorVariations.add(layered);
                     }
                 }
 
@@ -172,7 +220,7 @@ public class MutationEngine {
 
                             if (validator.isValid(candidate, activeProfile)) {
                                 resultSet.add(candidate);
-                                if (resultSet.size() >= activeProfile.maxPermutations()) {
+                                if (isLimitReached(resultSet.size(), activeProfile)) {
                                     return;
                                 }
                             }
@@ -183,7 +231,7 @@ public class MutationEngine {
                             }
                         }
                     }
-                    if (resultSet.size() >= activeProfile.maxPermutations()) {
+                    if (isLimitReached(resultSet.size(), activeProfile)) {
                         return;
                     }
                 }
@@ -210,13 +258,19 @@ public class MutationEngine {
                 Token singleCharToken = new Token(token.type(), charStr, currentOffset, currentOffset + charLen);
                 List<String> posList = new ArrayList<>();
 
-                for (Mutator mutator : mutators) {
-                    if (!mutator.appliesTo(singleCharToken, context)) {
-                        continue;
-                    }
-
+                List<Mutator> activeMutators = strategyDispatcher.filterApplicableMutators(mutators, singleCharToken, context);
+                for (Mutator mutator : activeMutators) {
                     List<String> variations = mutator.mutate(singleCharToken, context);
                     for (String var : variations) {
+                        String candidate = input.substring(0, currentOffset)
+                                + var
+                                + input.substring(currentOffset + charLen);
+                        posList.add(candidate);
+                    }
+                }
+                if (context.profile().encodingLayers() >= 2) {
+                    List<String> layered = layeredCompositionEngine.composeLayers(singleCharToken, context, activeMutators);
+                    for (String var : layered) {
                         String candidate = input.substring(0, currentOffset)
                                 + var
                                 + input.substring(currentOffset + charLen);
@@ -235,7 +289,7 @@ public class MutationEngine {
                         String candidate = posList.get(round);
                         if (context.markVisited(candidate) && validator.isValid(candidate, profile)) {
                             resultSet.add(candidate);
-                            if (resultSet.size() >= profile.maxPermutations()) {
+                            if (isLimitReached(resultSet.size(), profile)) {
                                 return;
                             }
                         }
@@ -247,38 +301,42 @@ public class MutationEngine {
 
     private void generateCombinatorial(String input, ConstraintProfile profile,
                                        TransformationContext context, Set<String> resultSet) {
-        // 1. Single-position variations interleaved across all characters
-        generateSinglePosition(input, profile, context, resultSet);
-        if (resultSet.size() >= profile.maxPermutations() || profile.maxPositionsMutated() < 2) {
-            return;
-        }
+        Set<String> singleCandidates = new LinkedHashSet<>();
+        generateSinglePosition(input, profile, context, singleCandidates);
 
+        Set<String> comboCandidates = new LinkedHashSet<>();
         List<Token> tokens = tokenizer.tokenize(input, profile.inputType());
         for (Token token : tokens) {
             if (!isPositionCandidate(token, profile)) continue;
 
-            // 2. All-character simultaneous mutations (full token transforms)
+            // 1. All-character simultaneous mutations (full token transforms)
             if (token.value().length() > 1) {
-                for (Mutator mutator : mutators) {
-                    if (mutator.appliesTo(token, context)) {
-                        for (String wholeVar : mutator.mutate(token, context)) {
-                            String candidate = input.substring(0, token.startIndex())
-                                    + wholeVar
-                                    + input.substring(token.endIndex());
-                            if (context.markVisited(candidate) && validator.isValid(candidate, profile)) {
-                                resultSet.add(candidate);
-                                if (resultSet.size() >= profile.maxPermutations()) {
-                                    return;
-                                }
-                            }
+                List<Mutator> activeMutators = strategyDispatcher.filterApplicableMutators(mutators, token, context);
+                for (Mutator mutator : activeMutators) {
+                    for (String wholeVar : mutator.mutate(token, context)) {
+                        String candidate = input.substring(0, token.startIndex())
+                                + wholeVar
+                                + input.substring(token.endIndex());
+                        if (context.markVisited(candidate) && validator.isValid(candidate, profile)) {
+                            comboCandidates.add(candidate);
+                        }
+                    }
+                }
+                if (context.profile().encodingLayers() >= 2) {
+                    for (String layered : layeredCompositionEngine.composeLayers(token, context, activeMutators)) {
+                        String candidate = input.substring(0, token.startIndex())
+                                + layered
+                                + input.substring(token.endIndex());
+                        if (context.markVisited(candidate) && validator.isValid(candidate, profile)) {
+                            comboCandidates.add(candidate);
                         }
                     }
                 }
             }
 
-            // 3. Multi-character combinations interleaved fairly across index pairs/triplets
+            // 2. Multi-character combinations across index pairs/triplets
             int[] codePoints = token.value().codePoints().toArray();
-            if (codePoints.length < 2) continue;
+            if (codePoints.length < 2 || profile.maxPositionsMutated() < 2) continue;
 
             int limit = Math.min(codePoints.length, MAX_COMBINATORIAL_CODEPOINTS);
             int maxPositions = Math.min(profile.maxPositionsMutated(), limit);
@@ -304,7 +362,7 @@ public class MutationEngine {
                         continue;
                     }
 
-                    List<String> comboCandidates = new ArrayList<>();
+                    List<String> currentCombos = new ArrayList<>();
                     for (String[] chosenVars : productCombinations(comboVariations)) {
                         StringBuilder sb = new StringBuilder();
                         int cpIdx = 0;
@@ -324,31 +382,40 @@ public class MutationEngine {
                             cpIdx++;
                         }
 
-                        comboCandidates.add(input.substring(0, token.startIndex())
+                        currentCombos.add(input.substring(0, token.startIndex())
                                 + sb.toString()
                                 + input.substring(token.endIndex()));
                     }
 
-                    if (!comboCandidates.isEmpty()) {
-                        allComboCandidates.add(comboCandidates);
+                    if (!currentCombos.isEmpty()) {
+                        allComboCandidates.add(currentCombos);
                     }
                 }
             }
 
-            // Round-robin interleaving across all combinations
             int maxComboVars = allComboCandidates.stream().mapToInt(List::size).max().orElse(0);
             for (int round = 0; round < maxComboVars; round++) {
                 for (List<String> comboList : allComboCandidates) {
                     if (round < comboList.size()) {
                         String candidate = comboList.get(round);
                         if (context.markVisited(candidate) && validator.isValid(candidate, profile)) {
-                            resultSet.add(candidate);
-                            if (resultSet.size() >= profile.maxPermutations()) {
-                                return;
-                            }
+                            comboCandidates.add(candidate);
                         }
                     }
                 }
+            }
+        }
+
+        // Fair round-robin interleaving: guarantee multi-position mutations are balanced with single-char
+        var comboIt = comboCandidates.iterator();
+        var singleIt = singleCandidates.iterator();
+        while ((comboIt.hasNext() || singleIt.hasNext()) && !isLimitReached(resultSet.size(), profile)) {
+            if (comboIt.hasNext()) {
+                resultSet.add(comboIt.next());
+                if (isLimitReached(resultSet.size(), profile)) break;
+            }
+            if (singleIt.hasNext()) {
+                resultSet.add(singleIt.next());
             }
         }
     }
@@ -395,15 +462,15 @@ public class MutationEngine {
 
     private List<String> getQuickVariations(Token singleToken, TransformationContext context, int offset) {
         List<String> quick = new ArrayList<>();
-        int mutatorCount = mutators.size();
+        List<Mutator> activeMutators = strategyDispatcher.filterApplicableMutators(mutators, singleToken, context);
+        int mutatorCount = activeMutators.size();
+        if (mutatorCount == 0) return quick;
         for (int i = 0; i < mutatorCount; i++) {
-            Mutator m = mutators.get((i + offset) % mutatorCount);
-            if (m.appliesTo(singleToken, context)) {
-                List<String> vars = m.mutate(singleToken, context);
-                for (String v : vars) {
-                    quick.add(v);
-                    if (quick.size() >= 3) break;
-                }
+            Mutator m = activeMutators.get((i + offset) % mutatorCount);
+            List<String> vars = m.mutate(singleToken, context);
+            for (String v : vars) {
+                quick.add(v);
+                if (quick.size() >= 3) break;
             }
             if (quick.size() >= 5) break;
         }

@@ -32,29 +32,33 @@ public class MutatorPayloadGeneratorProvider implements PayloadGeneratorProvider
     @Override
     public PayloadGenerator providePayloadGenerator(AttackConfiguration attackConfiguration) {
         return new PayloadGenerator() {
-            private Queue<String> payloadQueue = null;
+            private final Object lock = new Object();
+            private volatile java.util.concurrent.ConcurrentLinkedQueue<String> payloadQueue = null;
 
             @Override
             public GeneratedPayload generatePayloadFor(IntruderInsertionPoint insertionPoint) {
                 if (payloadQueue == null) {
-                    String baseStr = "admin";
-                    if (insertionPoint != null && insertionPoint.baseValue() != null && insertionPoint.baseValue().length() > 0) {
-                        baseStr = insertionPoint.baseValue().toString();
+                    synchronized (lock) {
+                        if (payloadQueue == null) {
+                            String baseStr = "admin";
+                            if (insertionPoint != null && insertionPoint.baseValue() != null && insertionPoint.baseValue().length() > 0) {
+                                baseStr = insertionPoint.baseValue().toString();
+                            }
+                            ConstraintProfile profile = ConstraintProfile.builder()
+                                    .maxPermutations(0)
+                                    .maxDepth(2)
+                                    .build();
+
+                            List<String> results = engine.generate(baseStr, profile);
+                            payloadQueue = new java.util.concurrent.ConcurrentLinkedQueue<>(results);
+                        }
                     }
-                    ConstraintProfile profile = ConstraintProfile.builder()
-                            .maxPermutations(100)
-                            .maxDepth(2)
-                            .build();
-
-                    List<String> results = engine.generate(baseStr, profile);
-                    payloadQueue = new ArrayDeque<>(results);
-                }
-
-                if (payloadQueue.isEmpty()) {
-                    return GeneratedPayload.end();
                 }
 
                 String nextPayload = payloadQueue.poll();
+                if (nextPayload == null) {
+                    return GeneratedPayload.end();
+                }
                 return GeneratedPayload.payload(ByteArray.byteArray(nextPayload));
             }
         };

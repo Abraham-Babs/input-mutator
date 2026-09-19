@@ -21,6 +21,11 @@ public class NumericRadixMutator implements Mutator {
     }
 
     @Override
+    public com.inputmutator.engine.model.ArtifactCategory category() {
+        return com.inputmutator.engine.model.ArtifactCategory.NUMERIC_RADIX;
+    }
+
+    @Override
     public boolean appliesTo(Token token, TransformationContext context) {
         return token.type() == TokenType.NUMERIC;
     }

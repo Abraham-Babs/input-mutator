@@ -136,7 +136,7 @@ public class InputTokenizer {
                 i++;
             } else if (Character.isLetter(c)) {
                 int start = i;
-                while (i < len && (Character.isLetter(input.charAt(i)) || input.charAt(i) == '_')) {
+                while (i < len && (Character.isLetterOrDigit(input.charAt(i)) || input.charAt(i) == '_')) {
                     i++;
                 }
                 tokens.add(new Token(TokenType.LITERAL, input.substring(start, i), start, i));

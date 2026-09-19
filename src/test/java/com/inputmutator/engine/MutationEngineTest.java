@@ -297,5 +297,38 @@ class MutationEngineTest {
         assertNotNull(comboResults);
         assertFalse(comboResults.isEmpty(), "Combinatorial granularity must generate permutations for inputs with numeric tokens");
     }
+
+    @Test
+    void testCombinatorialProducesDistinctMultiPositionMutations() {
+        ConstraintProfile singleProfile = ConstraintProfile.builder()
+                .granularityMode(GranularityMode.SINGLE_POSITION)
+                .maxPermutations(50)
+                .build();
+        List<String> singleResults = engine.generate("admin", singleProfile);
+
+        ConstraintProfile comboProfile = ConstraintProfile.builder()
+                .granularityMode(GranularityMode.COMBINATORIAL)
+                .maxPositionsMutated(2)
+                .maxPermutations(50)
+                .build();
+        List<String> comboResults = engine.generate("admin", comboProfile);
+
+        assertFalse(comboResults.isEmpty());
+        // Verify that combinatorial mode is not identical to single-position mode
+        boolean hasMultiCharVariant = comboResults.stream().anyMatch(r -> !singleResults.contains(r));
+        assertTrue(hasMultiCharVariant, "Combinatorial mode must produce multi-character combinations not present in single-position");
+    }
+
+    @Test
+    void testUncappedNaturalExhaustion() {
+        ConstraintProfile uncappedProfile = ConstraintProfile.builder()
+                .maxPermutations(0) // 0 = unlimited / natural exhaustion
+                .build();
+
+        assertTrue(uncappedProfile.isUncapped());
+        List<String> results = engine.generate("test", uncappedProfile);
+        assertFalse(results.isEmpty());
+        assertTrue(results.size() > 10, "Uncapped generation should run to natural exhaustion");
+    }
 }
 

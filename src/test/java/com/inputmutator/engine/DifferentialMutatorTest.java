@@ -161,4 +161,23 @@ class DifferentialMutatorTest {
         boolean hasSlashVariant = results.stream().anyMatch(s -> s.contains("\u2044") || s.contains("\u2215"));
         assertTrue(hasSlashVariant, "Should generate Unicode fraction or division slash variants");
     }
+
+    @Test
+    void testOverlongUtf8AndEncodingLayers() {
+        ConstraintProfile profile = ConstraintProfile.builder()
+                .encodingLayers(3)
+                .maxPermutations(100)
+                .build();
+
+        List<String> results = engine.generate("/test", profile);
+        assertFalse(results.isEmpty());
+
+        // Verify overlong UTF-8 generation (e.g. %c0%af for / or %c1% for t)
+        boolean hasOverlong = results.stream().anyMatch(s -> s.toLowerCase().contains("%c0%af") || s.toLowerCase().contains("%e0%80%af"));
+        assertTrue(hasOverlong, "Should generate overlong UTF-8 representations for ASCII tokens");
+
+        // Verify triple URL encoding (%2525...)
+        boolean hasTriple = results.stream().anyMatch(s -> s.contains("%2525"));
+        assertTrue(hasTriple, "Should generate triple URL encoding when encodingLayers >= 3");
+    }
 }

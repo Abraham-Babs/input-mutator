@@ -2,11 +2,14 @@ package com.inputmutator.engine.pipeline;
 
 import com.inputmutator.engine.constraint.ConstraintProfile;
 import com.inputmutator.engine.model.InputType;
+import com.inputmutator.engine.model.TestingIntent;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Generates boundary archetype test cases when no target input is specified by the user.
+ * Generates boundary archetype test cases when no target input is specified by the user,
+ * guided by the active TestingIntent and CharacterSetConstraint.
  */
 public class SeedGenerator {
 
@@ -16,7 +19,7 @@ public class SeedGenerator {
             type = InputType.GENERIC_STRING;
         }
 
-        List<String> seeds = switch (type) {
+        List<String> rawSeeds = switch (type) {
             case NUMERIC -> List.of(
                     "0", "-1", "1", "2147483647", "2147483648", "-2147483648",
                     "9223372036854775807", "0000", "0x0", "0b0", "0o0",
@@ -61,21 +64,36 @@ public class SeedGenerator {
                     "0000000000",
                     "+0"
             );
-            default -> List.of(
-                    "admin",
-                    "root",
-                    "test",
-                    "guest",
-                    "user",
-                    "default",
-                    "null",
-                    "undefined",
-                    "<test>",
-                    "' OR 1=1--",
-                    "\""
-            );
+            default -> generateGenericSeeds(profile.testingIntent());
         };
 
-        return seeds;
+        // Filter seeds against CharacterSetConstraint if defined
+        if (profile.characterSetConstraint() == null) {
+            return rawSeeds;
+        }
+        List<String> filtered = new ArrayList<>();
+        for (String s : rawSeeds) {
+            if (profile.characterSetConstraint().satisfies(s)) {
+                filtered.add(s);
+            }
+        }
+        return filtered.isEmpty() ? rawSeeds : filtered;
+    }
+
+    private List<String> generateGenericSeeds(TestingIntent intent) {
+        if (intent == TestingIntent.WHITELIST_AUDITING) {
+            return List.of(
+                    "admin", "root", "user123", "guest", "test", "default", "system", "42", "127.0.0.1"
+            );
+        } else if (intent == TestingIntent.PARSER_DIFFERENTIAL) {
+            return List.of(
+                    "/admin", "/api/v1/users", "/..;/", "admin;param=1", "admin%00", "admin/**/",
+                    "admin//", "admin\\", "<test>", "null", "undefined", "user(comment)@domain.com", "{\"role\":\"admin\"}"
+            );
+        }
+        return List.of(
+                "admin", "root", "../etc/passwd", "' OR '1'='1", "<script>alert(1)</script>",
+                "sleep(5)", "cmd.exe", "/bin/sh", "test", "guest", "null", "undefined"
+        );
     }
 }

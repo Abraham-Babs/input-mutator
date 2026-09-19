@@ -84,6 +84,11 @@ public class UnicodeMutator implements Mutator {
     }
 
     @Override
+    public com.inputmutator.engine.model.ArtifactCategory category() {
+        return com.inputmutator.engine.model.ArtifactCategory.UNICODE_HOMOGLYPHS;
+    }
+
+    @Override
     public boolean appliesTo(Token token, TransformationContext context) {
         TokenType t = token.type();
         return t == TokenType.LITERAL || t == TokenType.DELIMITER ||

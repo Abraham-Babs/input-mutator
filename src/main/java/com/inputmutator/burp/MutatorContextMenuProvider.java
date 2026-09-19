@@ -44,6 +44,17 @@ public class MutatorContextMenuProvider implements ContextMenuItemsProvider {
         JMenuItem sendToMutatorItem = new JMenuItem("Send to Input Mutator");
         sendToMutatorItem.addActionListener(e -> {
             mainPanel.setInputText(selectedText);
+            SwingUtilities.invokeLater(() -> {
+                Component parent = mainPanel.getParent();
+                while (parent != null) {
+                    if (parent instanceof JTabbedPane tabbedPane) {
+                        tabbedPane.setSelectedComponent(mainPanel);
+                        break;
+                    }
+                    parent = parent.getParent();
+                }
+                mainPanel.requestFocusInWindow();
+            });
             api.logging().logToOutput("Target input sent to Input Mutator: " + (selectedText.length() > 30 ? selectedText.substring(0, 30) + "..." : selectedText));
         });
 
