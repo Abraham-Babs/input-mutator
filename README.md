@@ -71,7 +71,7 @@ You'll need JDK 21+ and Maven 3.8+.
 
 ```bash
 git clone https://github.com/Abraham-Babs/input-mutator.git
-cd YOUR_REPO
+cd input-mutator
 mvn clean test package
 ```
 
