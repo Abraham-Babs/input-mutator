@@ -1,6 +1,6 @@
 # Input Mutator
 
-[![CI](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/Abraham-Babs/input-mutator/actions/workflows/ci.yml/badge.svg)](https://github.com/Abraham-Babs/input-mutator/actions/workflows/ci.yml)
 
 A constraint-guided input permutation engine for application security testing, written in Java 21. It produces structured, parser-aware mutations rather than the noise you get from naive fuzzers — useful for whitelist auditing, blacklist evasion, and catching proxy/backend normalization desync.
 
@@ -70,7 +70,7 @@ You'll need JDK 21+ and Maven 3.8+.
 - **Linux**: `sudo apt install maven` / `sudo dnf install maven`
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git clone https://github.com/Abraham-Babs/input-mutator.git
 cd YOUR_REPO
 mvn clean test package
 ```
