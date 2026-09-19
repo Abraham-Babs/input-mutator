@@ -176,3 +176,9 @@ java -jar input-mutator-1.0.0-SNAPSHOT.jar -t "admin" -i blacklist -n 0 > wordli
    - **Suite Tab** — the full GUI and normalization inspector inside Burp
    - **Context Menu** — highlight any value in Repeater or Proxy, right-click, select **Send to Input Mutator**
    - **Intruder Payload Generator** — in any Intruder attack, set payload type to `Extension-generated` and select **Input Mutator - Constraint Engine**
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
