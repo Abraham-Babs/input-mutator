@@ -1,11 +1,15 @@
 # Input Mutator
 
+[![CI](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/ci.yml)
+
 A lightweight, constraint-guided input permutation engine written in Java 21. Designed for application input validation testing, parser boundary analysis, and differential compliance verification without the noise of naive random fuzzers.
 
 Runs in three modes from a single fat JAR:
 1. **Burp Suite Montoya Extension**: Native suite tab, Repeater/Proxy context-menu action, and custom Intruder payload generator.
 2. **Standalone Desktop GUI**: Swing interface with live differential parser simulation, intent presets, artifact toggles, and an embedded reference guide.
 3. **Headless CLI**: Command-line tool built for shell piping, automated seed generation, and CI/CD validation pipelines.
+
+![Input Mutator Desktop GUI — Blacklist Evasion mode generating URL path mutations with live Normalization Inspector](docs/screenshot.jpg)
 
 ---
 
