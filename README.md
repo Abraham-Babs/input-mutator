@@ -9,7 +9,14 @@ Runs in three modes from a single fat JAR:
 2. **Standalone Desktop GUI**: Swing interface with live differential parser simulation, intent presets, artifact toggles, and an embedded reference guide.
 3. **Headless CLI**: Command-line tool built for shell piping, automated seed generation, and CI/CD validation pipelines.
 
-![Input Mutator Desktop GUI — Blacklist Evasion mode generating URL path mutations with live Normalization Inspector](docs/screenshot.jpg)
+**Desktop GUI** — Blacklist Evasion mode with live Normalization Inspector:
+![Desktop GUI showing mutation results and normalization inspector](docs/screenshot.jpg)
+
+**Burp Suite Extension** — Native suite tab with context-menu Send to Input Mutator:
+![Burp Suite integration showing the Input Mutator tab and Send to Input Mutator context menu](docs/screenshot-burp.jpg)
+
+**Headless CLI** — Piping mutations directly to a wordlist:
+![CLI output showing 30 constraint-guided mutations of "admin" piped to stdout](docs/screenshot-cli.jpg)
 
 ---
 
